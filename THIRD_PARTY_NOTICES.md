@@ -2,7 +2,7 @@
 
 本项目（WB的3D容器 / wbs_simple3D）在运行时会动态加载若干第三方库与资源（主要来自 CDN）。这些第三方项目的版权与许可证归其原作者所有。
 
-本清单依据发布文件 [wbs_simple3D.js] 中出现的外链资源整理，方便开源发布时做合规与鸣谢。
+本清单依据发布文件 [wbs_simple3D.js](wbs_simple3D.js) 中出现的外链资源整理，方便开源发布时做合规与鸣谢。
 
 ## 运行时依赖（通过 CDN 加载）
 
@@ -52,6 +52,15 @@
 - 上游项目：pmndrs/cannon-es
 - 加载来源：
   - https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js
+
+## 示例项目附带的 TurboWarp 官方扩展
+
+### Pointerlock（ID: pointerlock）
+- 用途：鼠标锁定（Pointer Lock）相关积木；锁定时 Mouse X/Y 报告每帧增量；替代旧 pointerlock experiment
+- 上游：TurboWarp 官方扩展（Extension Gallery）
+- 许可证：MIT AND MPL-2.0（未修改，按原项目声明）
+- 加载来源：
+  - https://extensions.turbowarp.org/pointerlock.js
 
 ## CDN 鸣谢
 本项目通过以下站点分发/托管第三方依赖文件（它们提供的是“分发服务”，不等同于许可证主体）：

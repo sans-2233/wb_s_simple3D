@@ -47,10 +47,12 @@
 ## 依赖与鸣谢（Third‑Party）
 本扩展在运行时会通过 CDN 动态加载部分第三方库/脚本与资源（Three.js 及其 examples、cannon-es 等）。这些第三方项目的版权归原作者所有。
 
-完整列表与来源见 [THIRD_PARTY_NOTICES.md](file:///g:/工程/wbs_simple3D/THIRD_PARTY_NOTICES.md)。
+示例项目 `sample.sb3` 还使用了 TurboWarp 官方扩展 Pointerlock（鼠标锁定），未做修改，通过官方扩展 CDN 导入。
+
+完整列表与来源见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 许可证（MPLv2）
-本仓库代码以 Mozilla Public License 2.0（MPL-2.0）开源。详见 [LICENSE](file:///g:/工程/wbs_simple3D/LICENSE)。
+本仓库代码以 Mozilla Public License 2.0（MPL-2.0）开源。详见 [LICENSE](LICENSE)。
 
 ## 合规与分发说明（重要）
 - 本扩展会在运行时从第三方 CDN 拉取依赖。若你准备“离线发布/内网部署/打包分发”，建议将依赖改为可控的镜像或本地副本，并确保满足第三方许可证要求。
