@@ -2,7 +2,6 @@
 // 在turbowarp中非常方便地创建精美的3D作品
 // 许可证:MPLv2
 
-
 class LibraryManager {
     constructor() {
         this.loadedLibraries = new Set();
@@ -1388,6 +1387,37 @@ class ThreeDContainerExtension {
                     }
                 },
                 {
+                    opcode: 'setModelAnimationFrameCount',
+                    blockType: Scratch.BlockType.COMMAND,
+                    text: '设置容器 [CONTAINER_ID] 模型 [MODEL_ID] 播放帧数 [FRAME_COUNT]',
+                    arguments: {
+                        CONTAINER_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '3D1' },
+                        MODEL_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'model1' },
+                        FRAME_COUNT: { type: Scratch.ArgumentType.NUMBER, defaultValue: -1 }
+                    }
+                },
+                {
+                    opcode: 'setModelAnimationProgressFrame',
+                    blockType: Scratch.BlockType.COMMAND,
+                    text: '设置容器 [CONTAINER_ID] 模型 [MODEL_ID] 播放进度 [FRAME] 帧',
+                    arguments: {
+                        CONTAINER_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '3D1' },
+                        MODEL_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'model1' },
+                        FRAME: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 }
+                    }
+                },
+                {
+                    opcode: 'setModelAnimationTransition',
+                    blockType: Scratch.BlockType.COMMAND,
+                    text: '设置容器 [CONTAINER_ID] 模型 [MODEL_ID] 过渡帧 [TRANSITION_FRAMES] 帧 形式 [EASING]',
+                    arguments: {
+                        CONTAINER_ID: { type: Scratch.ArgumentType.STRING, defaultValue: '3D1' },
+                        MODEL_ID: { type: Scratch.ArgumentType.STRING, defaultValue: 'model1' },
+                        TRANSITION_FRAMES: { type: Scratch.ArgumentType.NUMBER, defaultValue: 0 },
+                        EASING: { type: Scratch.ArgumentType.STRING, menu: 'animationEasingMenu' }
+                    }
+                },
+                {
                     opcode: 'stopModelAnimation',
                     blockType: Scratch.BlockType.COMMAND,
                     text: '停止容器 [CONTAINER_ID] 模型 [MODEL_ID] 动画',
@@ -1910,7 +1940,11 @@ class ThreeDContainerExtension {
             },
             animationLoopMenu: {
                 acceptReporters: false,
-                items: ['单次播放', '循环播放', '往返播放']
+                items: ['单次播放', '循环播放', '停止在最后一帧']
+            },
+            animationEasingMenu: {
+                acceptReporters: false,
+                items: ['线性', '二次', '三次', '弹性', '弹跳', '平滑']
             },
             filterTypeMenu: {
                 acceptReporters: false,
@@ -2596,6 +2630,37 @@ class ThreeDContainerExtension {
             const containerData = this.containers.get(containerId);
             if (containerData) {
                 containerData.sceneManager.playAnimation(modelId, animationName, loopMode);
+                this.setNeedsRender();
+            }
+        }
+        setModelAnimationFrameCount(args) {
+            const containerId = Scratch.Cast.toString(args.CONTAINER_ID);
+            const modelId = Scratch.Cast.toString(args.MODEL_ID);
+            const frameCount = Scratch.Cast.toNumber(args.FRAME_COUNT);
+            const containerData = this.containers.get(containerId);
+            if (containerData) {
+                containerData.sceneManager.setAnimationPlaybackFrameCount(modelId, frameCount);
+                this.setNeedsRender();
+            }
+        }
+        setModelAnimationProgressFrame(args) {
+            const containerId = Scratch.Cast.toString(args.CONTAINER_ID);
+            const modelId = Scratch.Cast.toString(args.MODEL_ID);
+            const frame = Scratch.Cast.toNumber(args.FRAME);
+            const containerData = this.containers.get(containerId);
+            if (containerData) {
+                containerData.sceneManager.setAnimationProgressFrame(modelId, frame);
+                this.setNeedsRender();
+            }
+        }
+        setModelAnimationTransition(args) {
+            const containerId = Scratch.Cast.toString(args.CONTAINER_ID);
+            const modelId = Scratch.Cast.toString(args.MODEL_ID);
+            const transitionFrames = Scratch.Cast.toNumber(args.TRANSITION_FRAMES);
+            const easing = Scratch.Cast.toString(args.EASING);
+            const containerData = this.containers.get(containerId);
+            if (containerData) {
+                containerData.sceneManager.setAnimationTransition(modelId, transitionFrames, easing);
                 this.setNeedsRender();
             }
         }
@@ -6277,30 +6342,192 @@ updateConstraints(deltaTime) {
                 console.warn(`动画 ${animationName} 不存在`);
                 return;
             }
-            if (model.userData.currentAnimation) {
-                model.userData.currentAnimation.stop();
+            const fps = 24;
+            const normalizedLoop = (() => {
+                const raw = String(loop ?? '').trim();
+                if (!raw) return 'loop';
+                if (raw === 'loop' || raw === 'once' || raw === 'hold' || raw === 'pingpong') return raw;
+                switch (raw) {
+                    case '循环播放':
+                    case '重复':
+                    case '重复播放':
+                        return 'loop';
+                    case '单次播放':
+                    case '一次':
+                    case '一次播放':
+                        return 'once';
+                    case '停止在最后一帧':
+                    case '停最后一帧':
+                        return 'hold';
+                    case '往返播放':
+                    case '来回播放':
+                    case '乒乓播放':
+                        return 'pingpong';
+                    default:
+                        return 'loop';
+                }
+            })();
+            const currentAnimation = model.userData.currentAnimation || null;
+            const transitionFrames = Number(model.userData.animationTransitionFrames ?? 0);
+            const transitionSeconds = Math.max(0, transitionFrames) / fps;
+            const transitionEasing = String(model.userData.animationTransitionEasing ?? '线性');
+            if (model.userData.animationTransitionState) {
+                const { fromAction, toAction } = model.userData.animationTransitionState;
+                if (fromAction && fromAction !== action) fromAction.stop();
+                if (toAction && toAction !== action) toAction.stop();
+                model.userData.animationTransitionState = null;
             }
-            switch (loop) {
+            action.clampWhenFinished = false;
+            switch (normalizedLoop) {
                 case 'loop':
-                    action.setLoop(THREE.LoopRepeat);
+                    action.setLoop(THREE.LoopRepeat, Infinity);
                     break;
                 case 'once':
-                    action.setLoop(THREE.LoopOnce);
+                    action.setLoop(THREE.LoopOnce, 1);
+                    action.clampWhenFinished = false;
+                    break;
+                case 'hold':
+                    action.setLoop(THREE.LoopOnce, 1);
                     action.clampWhenFinished = true;
                     break;
                 case 'pingpong':
-                    action.setLoop(THREE.LoopPingPong);
+                    action.setLoop(THREE.LoopPingPong, Infinity);
                     break;
             }
+            this._applyAnimationPlaybackFrameCount(model, action, fps);
+            if (currentAnimation && currentAnimation !== action && transitionSeconds > 0) {
+                currentAnimation.enabled = true;
+                currentAnimation.setEffectiveWeight(1);
+                if (!currentAnimation.isRunning()) currentAnimation.play();
+                action.enabled = true;
+                action.setEffectiveWeight(0);
+                action.reset();
+                action.play();
+                model.userData.animationTransitionState = {
+                    fromAction: currentAnimation,
+                    toAction: action,
+                    elapsed: 0,
+                    duration: transitionSeconds,
+                    easing: transitionEasing
+                };
+                model.userData.currentAnimation = action;
+                return;
+            }
+            if (currentAnimation && currentAnimation !== action) {
+                currentAnimation.stop();
+            }
+            action.enabled = true;
+            action.setEffectiveWeight(1);
             action.reset();
             action.play();
             model.userData.currentAnimation = action;
+        }
+        setAnimationPlaybackFrameCount(modelId, frameCount) {
+            const model = this.models.get(modelId);
+            if (!model || !model.userData.mixer) {
+                console.warn(`模型 ${modelId} 不存在或没有动画`);
+                return;
+            }
+            model.userData.animationPlaybackFrameCount = Number(frameCount);
+            const action = model.userData.currentAnimation;
+            if (action) {
+                this._applyAnimationPlaybackFrameCount(model, action, 24);
+            }
+        }
+        setAnimationProgressFrame(modelId, frame) {
+            const model = this.models.get(modelId);
+            if (!model || !model.userData.mixer) {
+                console.warn(`模型 ${modelId} 不存在或没有动画`);
+                return;
+            }
+            const action = model.userData.currentAnimation;
+            if (!action) {
+                console.warn(`模型 ${modelId} 当前没有播放动画`);
+                return;
+            }
+            const fps = 24;
+            const targetFrame = Math.max(0, Number(frame) || 0);
+            const clip = action.getClip ? action.getClip() : null;
+            const duration = clip ? Number(clip.duration) || 0 : 0;
+            const targetTime = targetFrame / fps;
+            action.time = duration > 0 ? Math.min(duration, targetTime) : targetTime;
+            model.userData.mixer.update(0);
+        }
+        setAnimationTransition(modelId, transitionFrames, easing) {
+            const model = this.models.get(modelId);
+            if (!model) {
+                console.warn(`模型 ${modelId} 不存在`);
+                return;
+            }
+            const frames = Math.max(0, Number(transitionFrames) || 0);
+            model.userData.animationTransitionFrames = frames;
+            model.userData.animationTransitionEasing = String(easing ?? '线性');
+        }
+        _applyAnimationPlaybackFrameCount(model, action, fps = 24) {
+            const rawFrames = Number(model?.userData?.animationPlaybackFrameCount);
+            if (!Number.isFinite(rawFrames) || rawFrames === -1) {
+                action.timeScale = 1;
+                return;
+            }
+            const frames = Math.max(1, rawFrames);
+            const clip = action.getClip ? action.getClip() : null;
+            const duration = clip ? Number(clip.duration) || 0 : 0;
+            if (!duration) return;
+            const targetSeconds = frames / fps;
+            action.timeScale = targetSeconds > 0 ? duration / targetSeconds : 1;
+        }
+        _easeValue(easing, t) {
+            const x = Math.min(1, Math.max(0, Number(t) || 0));
+            const key = String(easing ?? '').trim();
+            switch (key) {
+                case '二次':
+                case 'quadratic':
+                    return x * x;
+                case '三次':
+                case 'cubic':
+                    return x * x * x;
+                case '平滑':
+                case 'smooth':
+                    return x * x * (3 - 2 * x);
+                case '弹性':
+                case 'elastic': {
+                    if (x === 0 || x === 1) return x;
+                    const c4 = (2 * Math.PI) / 3;
+                    return Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
+                }
+                case '弹跳':
+                case 'bounce': {
+                    const n1 = 7.5625;
+                    const d1 = 2.75;
+                    if (x < 1 / d1) return n1 * x * x;
+                    if (x < 2 / d1) {
+                        const y = x - 1.5 / d1;
+                        return n1 * y * y + 0.75;
+                    }
+                    if (x < 2.5 / d1) {
+                        const y = x - 2.25 / d1;
+                        return n1 * y * y + 0.9375;
+                    }
+                    const y = x - 2.625 / d1;
+                    return n1 * y * y + 0.984375;
+                }
+                case '线性':
+                case 'linear':
+                default:
+                    return x;
+            }
         }
         stopAnimation(modelId) {
             const model = this.models.get(modelId);
             if (!model || !model.userData.mixer) {
                 console.warn(`模型 ${modelId} 不存在或没有动画`);
                 return;
+            }
+            if (model.userData.animationTransitionState) {
+                const { fromAction, toAction } = model.userData.animationTransitionState;
+                if (fromAction) fromAction.stop();
+                if (toAction) toAction.stop();
+                model.userData.animationTransitionState = null;
             }
             if (model.userData.currentAnimation) {
                 model.userData.currentAnimation.stop();
@@ -6319,6 +6546,26 @@ updateConstraints(deltaTime) {
         updateAnimations(deltaTime) {
             this.models.forEach((model) => {
                 if (model.userData.mixer) {
+                    const transition = model.userData.animationTransitionState;
+                    if (transition) {
+                        const duration = Math.max(0.000001, Number(transition.duration) || 0.000001);
+                        transition.elapsed = (Number(transition.elapsed) || 0) + (Number(deltaTime) || 0);
+                        const t = Math.min(1, transition.elapsed / duration);
+                        const eased = this._easeValue(transition.easing, t);
+                        if (transition.fromAction) {
+                            transition.fromAction.enabled = true;
+                            transition.fromAction.setEffectiveWeight(1 - eased);
+                        }
+                        if (transition.toAction) {
+                            transition.toAction.enabled = true;
+                            transition.toAction.setEffectiveWeight(eased);
+                        }
+                        if (t >= 1) {
+                            if (transition.fromAction) transition.fromAction.stop();
+                            if (transition.toAction) transition.toAction.setEffectiveWeight(1);
+                            model.userData.animationTransitionState = null;
+                        }
+                    }
                     model.userData.mixer.update(deltaTime);
                 }
             });
